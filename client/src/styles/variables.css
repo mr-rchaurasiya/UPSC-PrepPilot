@@ -1,0 +1,43 @@
+:root {
+  /* Font Family */
+  --font-sans: 'Outfit', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+
+  /* Color Base (Dark Theme Default) - High Visibility Contrast */
+  --bg-primary: #0a0e17;      /* Deeper obsidian dark */
+  --bg-secondary: #121824;    /* Slate-dark card background */
+  --bg-tertiary: #1b2330;     /* Highlight inputs background */
+  --border-color: rgba(255, 255, 255, 0.16); /* Double contrast borders */
+
+  --text-primary: #ffffff;    /* Pure white primary text */
+  --text-secondary: #e2e8f0;  /* High readability grey for subtitles */
+  --text-muted: #94a3b8;      /* Lighter slate for placeholder text */
+
+  --accent-primary: #6366f1;  /* Vibrant Indigo */
+  --accent-primary-hover: #4f46e5;
+  --accent-secondary: #a855f7; /* Vibrant Violet */
+  --accent-success: #10b981;  /* Emerald */
+  --accent-warning: #f59e0b;  /* Amber */
+  --accent-danger: #f43f5e;   /* Bright Rose */
+
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 8px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 12px 24px rgba(0, 0, 0, 0.5);
+  
+  --transition-smooth: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  --border-radius: 12px;
+}
+
+body.light-mode {
+  --bg-primary: #f9fafb;
+  --bg-secondary: #ffffff;
+  --bg-tertiary: #f3f4f6;
+  --border-color: rgba(0, 0, 0, 0.12);
+
+  --text-primary: #111827;
+  --text-secondary: #374151;
+  --text-muted: #6b7280;
+
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.05);
+  --shadow-lg: 0 12px 24px rgba(0, 0, 0, 0.05);
+}
