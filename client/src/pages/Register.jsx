@@ -62,6 +62,9 @@ export const Register = () => {
             <label className="form-label small text-secondary">Full Name</label>
             <input
               type="text"
+              id="name"
+              name="name"
+              autoComplete="name"
               className="form-control-custom"
               placeholder="Aspirant Name"
               value={name}
@@ -74,6 +77,9 @@ export const Register = () => {
             <label className="form-label small text-secondary">Email Address</label>
             <input
               type="email"
+              id="email"
+              name="email"
+              autoComplete="email"
               className="form-control-custom"
               placeholder="name@example.com"
               value={email}
@@ -86,6 +92,9 @@ export const Register = () => {
             <label className="form-label small text-secondary">Password</label>
             <input
               type="password"
+              id="password"
+              name="password"
+              autoComplete="new-password"
               className="form-control-custom"
               placeholder="Minimum 8 characters (letters + numbers)"
               value={password}
@@ -98,6 +107,9 @@ export const Register = () => {
             <label className="form-label small text-secondary">Confirm Password</label>
             <input
               type="password"
+              id="confirmPassword"
+              name="confirmPassword"
+              autoComplete="new-password"
               className="form-control-custom"
               placeholder="Confirm password"
               value={confirmPassword}

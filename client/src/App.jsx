@@ -158,7 +158,7 @@ function App() {
           <Route
             path="/admin"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute requireAdmin={true}>
                 <MainLayout>
                   <AdminRoom />
                 </MainLayout>
@@ -221,18 +221,6 @@ function App() {
               <ProtectedRoute>
                 <MainLayout>
                   <PlannerRoom />
-                </MainLayout>
-              </ProtectedRoute>
-            }
-          />
-
-          {/* Protected Admin Route */}
-          <Route
-            path="/admin"
-            element={
-              <ProtectedRoute requireAdmin={true}>
-                <MainLayout>
-                  <AdminDashboard />
                 </MainLayout>
               </ProtectedRoute>
             }

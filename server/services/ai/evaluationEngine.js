@@ -7,9 +7,9 @@ export const evaluateAnswer = async (questionText, answerText) => {
 
   if (provider === 'gemini' && process.env.GEMINI_API_KEY) {
     try {
-      const { GoogleGenAI } = await import('@google/generative-ai');
-      const genAI = new GoogleGenAI(process.env.GEMINI_API_KEY);
-      const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+      const { GoogleGenerativeAI } = await import('@google/generative-ai');
+      const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+      const model = genAI.getGenerativeModel({ model: 'gemini-3.6-flash' });
 
       const prompt = `
         You are an expert UPSC Civil Services examiner. Evaluate the following mains answer.
@@ -61,6 +61,61 @@ export const evaluateAnswer = async (questionText, answerText) => {
       return report;
     } catch (error) {
       console.warn('Gemini live evaluation failed. Falling back to mock evaluation engine:', error.message);
+    }
+  } else if ((provider === 'openai' || provider === 'chatgpt') && process.env.OPENAI_API_KEY) {
+    try {
+      const openAiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          model: 'gpt-4o-mini',
+          messages: [
+            {
+              role: 'system',
+              content: `You are an expert UPSC Civil Services examiner. Evaluate the mains answer. Provide the response in strict JSON format. Do NOT wrap it in markdown code blocks. The JSON must have the following keys:
+              {
+                "score": 6.5,
+                "introScore": 7,
+                "bodyScore": 6,
+                "conclusionScore": 7,
+                "structureFeedback": "Detailed feedback on introduction and answer structure.",
+                "contentFeedback": "Detailed feedback on body arguments, missing dimensions and data points.",
+                "suggestions": ["Suggestion 1", "Suggestion 2"],
+                "strengths": ["Strength 1"],
+                "weaknesses": ["Weakness 1"],
+                "missingDimensions": ["Missing 1"],
+                "improvementSuggestions": ["Improve 1"],
+                "idealStructure": "Intro: Contextualize -> Body: Details -> Conclusion: Way forward",
+                "suggestedExamples": ["Example 1"],
+                "suggestedConclusion": "Conclusion text",
+                "estimatedWordCount": 200,
+                "modelAnswerOutline": "1. Intro, 2. Body, 3. Conclusion"
+              }`
+            },
+            {
+              role: 'user',
+              content: `Question: "${questionText}"\n\nAnswer: "${answerText}"`
+            }
+          ],
+          response_format: { type: "json_object" }
+        })
+      });
+      const openAiData = await openAiResponse.json();
+      if (openAiData.choices && openAiData.choices[0]) {
+        const text = openAiData.choices[0].message.content;
+        let cleanJson = text.trim();
+        if (cleanJson.includes('```json')) {
+          cleanJson = cleanJson.split('```json')[1].split('```')[0].trim();
+        } else if (cleanJson.includes('```')) {
+          cleanJson = cleanJson.split('```')[1].split('```')[0].trim();
+        }
+        return JSON.parse(cleanJson);
+      }
+    } catch (error) {
+      console.warn('OpenAI live evaluation failed. Falling back to mock evaluation engine:', error.message);
     }
   }
 

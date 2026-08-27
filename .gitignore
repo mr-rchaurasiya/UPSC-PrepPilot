@@ -34,3 +34,6 @@ client/node_modules
 
 # Local uploads
 server/uploads/
+
+# Local database persistence file for mock testing
+server/config/offline_db.json

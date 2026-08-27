@@ -65,6 +65,9 @@ export const Login = () => {
             <label className="form-label small text-secondary">Email Address</label>
             <input
               type="email"
+              id="email"
+              name="email"
+              autoComplete="username"
               className="form-control-custom"
               placeholder="name@example.com"
               value={email}
@@ -83,6 +86,9 @@ export const Login = () => {
             <div className="position-relative">
               <input
                 type={showPassword ? 'text' : 'password'}
+                id="password"
+                name="password"
+                autoComplete="current-password"
                 className="form-control-custom"
                 placeholder="Enter password"
                 value={password}

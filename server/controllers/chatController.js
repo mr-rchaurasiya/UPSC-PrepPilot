@@ -69,16 +69,20 @@ export const sendChatMessage = async (req, res, next) => {
 
     if (provider === 'gemini' && process.env.GEMINI_API_KEY) {
       try {
-        const { GoogleGenAI } = await import('@google/generative-ai');
-        const genAI = new GoogleGenAI(process.env.GEMINI_API_KEY);
-        const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+        const { GoogleGenerativeAI } = await import('@google/generative-ai');
+        const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+        const model = genAI.getGenerativeModel({ model: 'gemini-3.6-flash' });
 
         const prompt = `
           ${contextPrompt}
+          Current Date: ${new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
           
           Student Message: "${text}"
           
-          Respond as a knowledgeable UPSC Mentor. Use clear structure. Keep response within 200 words. Do not invent official UPSC notification facts. Frame response advice as advisory.
+          Instructions:
+          1. Answer the student's question directly first. Do not ignore their query or jump straight to generic advice.
+          2. Keep the response natural, conversational, and tailored to the query.
+          3. Frame advice as advisory. Keep it within 200 words.
         `;
 
         const result = await model.generateContent(prompt);

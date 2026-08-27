@@ -1,9 +1,40 @@
 import mongoose from 'mongoose';
 import { sendVerificationEmail } from '../services/emailService.js';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const offlineDbPath = path.join(__dirname, '..', 'config', 'offline_db.json');
+
+const loadOfflineUsers = () => {
+  try {
+    if (fs.existsSync(offlineDbPath)) {
+      return JSON.parse(fs.readFileSync(offlineDbPath, 'utf8'));
+    }
+  } catch (err) {
+    console.error('Failed to load offline users:', err.message);
+  }
+  return {};
+};
+
+const saveOfflineUsers = (users) => {
+  try {
+    fs.writeFileSync(offlineDbPath, JSON.stringify(users, null, 2), 'utf8');
+  } catch (err) {
+    console.error('Failed to save offline users:', err.message);
+  }
+};
+
 
 export const dbCheck = async (req, res, next) => {
   if (mongoose.connection.readyState === 1) {
     return next();
+  }
+
+  if (!global.offlineUsers) {
+    global.offlineUsers = loadOfflineUsers();
   }
 
   console.log(`[Offline Fallback Mode] Intercepting request to ${req.method} ${req.path}`);
@@ -45,6 +76,7 @@ export const dbCheck = async (req, res, next) => {
       password,
       onboardingCompleted: false
     };
+    saveOfflineUsers(global.offlineUsers);
 
     const registeredUser = global.offlineUsers[email];
 
@@ -166,6 +198,7 @@ export const dbCheck = async (req, res, next) => {
     // Update password
     registeredUser.password = newPassword;
     delete global.dbUsersResetCodes[email];
+    saveOfflineUsers(global.offlineUsers);
 
     return res.status(200).json({
       success: true,
@@ -173,7 +206,7 @@ export const dbCheck = async (req, res, next) => {
     });
   }
 
-  if (cleanPath.startsWith('/auth/profile') || cleanPath.startsWith('/users/me')) {
+  if (cleanPath.startsWith('/auth/me') || cleanPath.startsWith('/auth/profile') || cleanPath.startsWith('/users/me')) {
     const authHeader = req.headers.authorization;
     let targetUser = {
       _id: 'mock-user-123',
@@ -225,6 +258,7 @@ export const dbCheck = async (req, res, next) => {
         const matched = Object.values(global.offlineUsers).find(u => u.id === mockId);
         if (matched) {
           matched.onboardingCompleted = true;
+          saveOfflineUsers(global.offlineUsers);
           targetUser = {
             _id: matched.id,
             name: matched.name,
@@ -264,7 +298,30 @@ export const dbCheck = async (req, res, next) => {
       let reply = '';
 
       const provider = process.env.AI_PROVIDER || 'mock';
-      if ((provider === 'openai' || provider === 'chatgpt') && process.env.OPENAI_API_KEY) {
+      if (provider === 'gemini' && process.env.GEMINI_API_KEY) {
+        try {
+          const { GoogleGenerativeAI } = await import('@google/generative-ai');
+          const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+          const model = genAI.getGenerativeModel({ model: 'gemini-3.6-flash' });
+
+          const prompt = `
+            You are a senior UPSC CSE Civil Services mentor. 
+            Current Date: ${new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+            
+            Instructions:
+            1. Answer the student's question directly first. Do not ignore their query or jump straight to generic advice.
+            2. Keep the response natural, conversational, and tailored to the query.
+            3. Frame advice as advisory. Keep it within 200 words.
+            
+            Student Message: "${text}"
+          `;
+
+          const result = await model.generateContent(prompt);
+          reply = result.response.text();
+        } catch (err) {
+          console.warn('Gemini offline chat failed, falling back:', err.message);
+        }
+      } else if ((provider === 'openai' || provider === 'chatgpt') && process.env.OPENAI_API_KEY) {
         try {
           const openAiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
             method: 'POST',

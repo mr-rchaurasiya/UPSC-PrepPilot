@@ -15,20 +15,23 @@ export const AuthProvider = ({ children }) => {
       const storedUser = localStorage.getItem('user');
 
       if (storedToken && storedUser) {
-        setToken(storedToken);
-        setUser(JSON.parse(storedUser));
-        
-        // Validate active token with database profile check
         try {
+          const parsedUser = JSON.parse(storedUser);
+          setToken(storedToken);
+          setUser(parsedUser);
+          
+          // Validate active token with database profile check
           const res = await API.get('/auth/me');
-          if (res.data.success) {
+          if (res.data.success && res.data.user) {
             setUser(res.data.user);
             localStorage.setItem('user', JSON.stringify(res.data.user));
+          } else {
+            logoutStateOnly();
           }
         } catch (err) {
           console.error('Failed to verify token on startup:', err.message);
-          // If token verification yields 401 unauthorized, log out session
-          if (err.response && err.response.status === 401) {
+          // If token verification yields 401 unauthorized or stored user is invalid JSON, log out session
+          if (err instanceof SyntaxError || (err.response && err.response.status === 401)) {
             logoutStateOnly();
           }
         }
