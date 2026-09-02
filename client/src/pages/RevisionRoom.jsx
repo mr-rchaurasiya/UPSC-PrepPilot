@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import Navbar from '../components/layout/Navbar.jsx';
 import { getRevisionDashboardData, rateTopicRevision } from '../services/revisionService.js';
 import { getQuestionsList } from '../services/practiceService.js';
@@ -20,14 +21,25 @@ export const RevisionRoom = () => {
 
   const loadDashboard = async () => {
     setLoading(true);
-    const data = await getRevisionDashboardData();
-    if (data) {
-      setDashboard(data);
+    try {
+      const data = await getRevisionDashboardData();
+      if (data) {
+        setDashboard({
+          dueToday: data.dueToday || [],
+          overdue: data.overdue || [],
+          upcoming: data.upcoming || [],
+          completed: data.completed || []
+        });
+      }
+    } catch (err) {
+      console.error('Failed to load revision dashboard:', err);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const handleStartSession = async (progressItem) => {
+    if (!progressItem) return;
     setActiveSessionTopic(progressItem);
     setSessionTab('notes');
     setFlashcardFlipped(false);
@@ -35,18 +47,21 @@ export const RevisionRoom = () => {
     
     // Load related questions
     try {
-      const qList = await getQuestionsList({ subject: progressItem.topic.subject });
-      setRelatedQuestions(qList.slice(0, 3));
+      const subject = progressItem?.topic?.subject || 'Indian Polity & Governance';
+      const qList = await getQuestionsList({ subject });
+      setRelatedQuestions(Array.isArray(qList) ? qList.slice(0, 3) : []);
     } catch (e) {
       console.error(e);
+      setRelatedQuestions([]);
     }
   };
 
   const handleApplyRating = async (ratingVal) => {
-    if (!activeSessionTopic) return;
+    if (!activeSessionTopic || !activeSessionTopic.topic) return;
     setActiveRateOption(ratingVal);
     try {
-      await rateTopicRevision(activeSessionTopic.topic._id, ratingVal);
+      const topicId = activeSessionTopic.topic._id || activeSessionTopic.topic;
+      await rateTopicRevision(topicId, ratingVal);
       setActiveSessionTopic(null);
       loadDashboard();
     } catch (e) {
@@ -55,7 +70,21 @@ export const RevisionRoom = () => {
   };
 
   // Preset flashcards mock data relative to the subject
-  const getSubjectFlashcards = (subject) => {
+  const getSubjectFlashcards = (subject = '') => {
+    const s = (subject || '').toLowerCase();
+    if (s.includes('history')) {
+      return [
+        { q: 'Who founded the Brahmo Samaj in 1828?', a: 'Raja Ram Mohan Roy in Calcutta.' },
+        { q: 'In which session did Congress pass the "Purna Swaraj" resolution?', a: 'Lahore Session of 1929 presided over by Jawaharlal Nehru.' },
+        { q: 'Which act established the dual system of control (Board of Control & Court of Directors)?', a: 'Pitt’s India Act of 1784.' }
+      ];
+    } else if (s.includes('economy')) {
+      return [
+        { q: 'What is headline inflation in India measured by?', a: 'Consumer Price Index (CPI-Combined) published by NSO.' },
+        { q: 'Which Article mandates the establishment of the Finance Commission?', a: 'Article 280 of the Indian Constitution.' },
+        { q: 'What is the Fiscal Responsibility and Budget Management (FRBM) target for fiscal deficit?', a: 'Aiming for 3% of GDP recommended by NK Singh Committee.' }
+      ];
+    }
     return [
       { q: 'What is the minimum age to qualify for election as the President of India?', a: '35 years of age (Article 58).' },
       { q: 'Which constitutional amendment added the word "Secular" to the Preamble?', a: 'The 42nd Constitutional Amendment Act of 1976.' },
@@ -63,16 +92,18 @@ export const RevisionRoom = () => {
     ];
   };
 
-  const currentFlashcards = activeSessionTopic ? getSubjectFlashcards(activeSessionTopic.topic.subject) : [];
+  const currentFlashcards = getSubjectFlashcards(activeSessionTopic?.topic?.subject);
+  const totalCardsCount = (dashboard.dueToday?.length || 0) + (dashboard.overdue?.length || 0) + (dashboard.upcoming?.length || 0) + (dashboard.completed?.length || 0);
 
   if (loading) {
     return (
       <div className="min-vh-100 d-flex flex-column" style={{ backgroundColor: 'var(--bg-primary)' }}>
         <Navbar />
-        <div className="flex-grow-1 d-flex align-items-center justify-content-center">
-          <div className="spinner-border" role="status" style={{ width: '3rem', height: '3rem', color: 'var(--accent-primary)' }}>
+        <div className="flex-grow-1 d-flex flex-column align-items-center justify-content-center">
+          <div className="spinner-border mb-3" role="status" style={{ width: '3rem', height: '3rem', color: 'var(--accent-primary)' }}>
             <span className="visually-hidden">Loading Spaced Repetition Engine...</span>
           </div>
+          <p className="text-secondary small">Loading Spaced Repetition schedules...</p>
         </div>
       </div>
     );
@@ -86,33 +117,40 @@ export const RevisionRoom = () => {
         {/* DASHBOARD MODE */}
         {!activeSessionTopic ? (
           <div>
-            <div className="mb-4">
-              <h2 className="gradient-text fw-bold mb-0">Smart Revision Engine</h2>
-              <p className="text-secondary small">Automatically calculated spaced repetition schedules based on recall strength rates</p>
+            <div className="mb-4 d-flex justify-content-between align-items-center flex-wrap gap-2">
+              <div>
+                <h2 className="gradient-text fw-bold mb-1">Smart Revision Engine</h2>
+                <p className="text-secondary small mb-0">Spaced repetition schedules based on active recall strength and forgetting curves</p>
+              </div>
+              <Link to="/syllabus" className="btn btn-sm btn-outline-primary-custom py-1.5 px-3">
+                📖 View Full Syllabus
+              </Link>
             </div>
 
             {/* Dashboard Cards Grid */}
-            <div className="row g-4 mb-5">
+            <div className="row g-4 mb-4">
               {[
-                { label: 'Due Today', count: dashboard.dueToday.length, list: dashboard.dueToday, color: 'var(--accent-danger)' },
-                { label: 'Overdue Reviews', count: dashboard.overdue.length, list: dashboard.overdue, color: 'var(--accent-warning)' },
-                { label: 'Upcoming Reviews', count: dashboard.upcoming.length, list: dashboard.upcoming, color: 'var(--accent-primary)' },
-                { label: 'Completed Reviews', count: dashboard.completed.length, list: dashboard.completed, color: 'var(--accent-success)' }
+                { label: 'Due Today', count: dashboard.dueToday?.length || 0, list: dashboard.dueToday || [], color: 'var(--accent-danger)' },
+                { label: 'Overdue Reviews', count: dashboard.overdue?.length || 0, list: dashboard.overdue || [], color: 'var(--accent-warning)' },
+                { label: 'Upcoming Reviews', count: dashboard.upcoming?.length || 0, list: dashboard.upcoming || [], color: 'var(--accent-primary)' },
+                { label: 'Completed Reviews', count: dashboard.completed?.length || 0, list: dashboard.completed || [], color: 'var(--accent-success)' }
               ].map((card, cIdx) => (
                 <div key={cIdx} className="col-12 col-md-6 col-lg-3">
                   <div className="custom-card glass-panel p-4 h-100 d-flex flex-column justify-content-between">
                     <div>
                       <span className="text-muted small fw-semibold text-uppercase" style={{ fontSize: '0.65rem' }}>{card.label}</span>
-                      <h2 className="fw-bold mt-2 mb-4" style={{ color: card.color }}>{card.count}</h2>
+                      <h2 className="fw-bold mt-2 mb-3" style={{ color: card.color }}>{card.count}</h2>
                     </div>
 
-                    <div className="d-flex flex-column gap-2" style={{ maxHeight: '150px', overflowY: 'auto' }}>
+                    <div className="d-flex flex-column gap-2" style={{ maxHeight: '160px', overflowY: 'auto' }}>
                       {card.list.length === 0 ? (
-                        <span className="small text-muted italic">Clear schedule</span>
+                        <span className="small text-muted fst-italic">No items</span>
                       ) : (
                         card.list.map((item, idx) => (
                           <div key={idx} className="p-2 rounded border d-flex justify-content-between align-items-center" style={{ backgroundColor: 'var(--bg-tertiary)', borderColor: 'var(--border-color)' }}>
-                            <span className="small text-secondary text-truncate" style={{ maxWidth: '120px' }}>{item.topic?.title}</span>
+                            <span className="small text-secondary text-truncate" style={{ maxWidth: '120px' }} title={item.topic?.title}>
+                              {item.topic?.title || 'Syllabus Topic'}
+                            </span>
                             {card.label !== 'Completed Reviews' && (
                               <button className="btn btn-sm btn-primary-custom py-0.5 px-2" style={{ fontSize: '0.65rem' }} onClick={() => handleStartSession(item)}>
                                 Review
@@ -126,14 +164,28 @@ export const RevisionRoom = () => {
                 </div>
               ))}
             </div>
+
+            {/* If 0 items scheduled, show a friendly prompt */}
+            {totalCardsCount === 0 && (
+              <div className="custom-card glass-panel p-4 text-center mt-3">
+                <div className="mb-2" style={{ fontSize: '2.5rem' }}>📚</div>
+                <h5 className="fw-bold text-secondary" style={{ color: 'var(--text-primary)' }}>No Topics in Revision Queue Yet</h5>
+                <p className="text-muted small mb-3" style={{ maxWidth: '500px', margin: '0 auto' }}>
+                  Topics are automatically scheduled for smart spaced repetition once you mark topics as completed or revised in your Syllabus Tracker.
+                </p>
+                <Link to="/syllabus" className="btn btn-primary-custom py-2 px-4">
+                  Go to Syllabus Tracker
+                </Link>
+              </div>
+            )}
           </div>
         ) : (
           /* ACTIVE REVISION SESSION COMPONENT */
           <div className="custom-card glass-panel p-4 p-md-5">
             <div className="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2 pb-3 border-bottom" style={{ borderColor: 'var(--border-color)' }}>
               <div>
-                <span className="badge text-uppercase bg-secondary-subtle text-secondary small border px-2 py-0.5 mb-1.5">{activeSessionTopic.topic?.code}</span>
-                <h5 className="fw-semibold text-secondary" style={{ color: 'var(--text-primary)' }}>{activeSessionTopic.topic?.title}</h5>
+                <span className="badge text-uppercase bg-secondary-subtle text-secondary small border px-2 py-0.5 mb-1.5">{activeSessionTopic.topic?.code || 'GS'}</span>
+                <h5 className="fw-semibold text-secondary mb-0" style={{ color: 'var(--text-primary)' }}>{activeSessionTopic.topic?.title || 'Active Topic'}</h5>
               </div>
               <button className="btn btn-sm btn-secondary-custom py-1.5 px-3" onClick={() => setActiveSessionTopic(null)}>
                 ✕ Close Session
@@ -167,7 +219,7 @@ export const RevisionRoom = () => {
                 <div>
                   <h6 className="fw-semibold text-secondary small mb-2">My Saved Syllabus Notes:</h6>
                   <p className="small text-secondary" style={{ lineHeight: '1.6' }}>
-                    {activeSessionTopic.notes || 'No notes saved for this syllabus topic. Edit syllabus progress to add reference notes.'}
+                    {activeSessionTopic.notes || 'No custom notes saved for this topic yet. You can add notes anytime in the Syllabus Tracker.'}
                   </p>
                 </div>
               )}
@@ -178,9 +230,9 @@ export const RevisionRoom = () => {
                   <div
                     className="p-4 rounded border text-center cursor-pointer shadow-sm d-flex flex-column align-items-center justify-content-center"
                     style={{
-                      width: '320px',
+                      width: '340px',
                       minHeight: '160px',
-                      backgroundColor: flashcardFlipped ? 'rgba(99, 102, 241, 0.05)' : 'var(--bg-secondary)',
+                      backgroundColor: flashcardFlipped ? 'rgba(99, 102, 241, 0.08)' : 'var(--bg-secondary)',
                       borderColor: 'var(--border-color)',
                       cursor: 'pointer',
                       transition: 'all 0.3s ease'
@@ -190,12 +242,12 @@ export const RevisionRoom = () => {
                     {!flashcardFlipped ? (
                       <div>
                         <span className="small text-muted d-block mb-3">Flashcard (Click to reveal answer)</span>
-                        <h6 className="fw-semibold text-secondary mb-0" style={{ color: 'var(--text-primary)' }}>{currentFlashcards[0].q}</h6>
+                        <h6 className="fw-semibold text-secondary mb-0" style={{ color: 'var(--text-primary)' }}>{currentFlashcards[0]?.q || 'What is the constitutional provision for this topic?'}</h6>
                       </div>
                     ) : (
                       <div>
                         <span className="small text-success d-block mb-3">Recall Answer:</span>
-                        <p className="small text-secondary mb-0">{currentFlashcards[0].a}</p>
+                        <p className="small text-secondary mb-0">{currentFlashcards[0]?.a || 'Article & case law guidelines.'}</p>
                       </div>
                     )}
                   </div>
@@ -205,14 +257,18 @@ export const RevisionRoom = () => {
               {/* Tab 3: PYQs */}
               {sessionTab === 'pyqs' && (
                 <div>
-                  <h6 className="fw-semibold text-secondary small mb-3 text-uppercase" style={{ fontSize: '0.65rem' }}>Practice Questions on {activeSessionTopic.topic?.subject}</h6>
+                  <h6 className="fw-semibold text-secondary small mb-3 text-uppercase" style={{ fontSize: '0.65rem' }}>Practice Questions on {activeSessionTopic.topic?.subject || 'Syllabus'}</h6>
                   <div className="d-flex flex-column gap-3">
-                    {relatedQuestions.map((q, idx) => (
-                      <div key={idx} className="p-3 rounded border bg-dark-subtle" style={{ borderColor: 'var(--border-color)' }}>
-                        <span className="badge bg-secondary-subtle text-secondary small border mb-2">Question {idx+1}</span>
-                        <p className="small text-secondary mb-0" style={{ color: 'var(--text-primary)', lineHeight: '1.5' }}>{q.questionText}</p>
-                      </div>
-                    ))}
+                    {relatedQuestions.length > 0 ? (
+                      relatedQuestions.map((q, idx) => (
+                        <div key={idx} className="p-3 rounded border bg-dark-subtle" style={{ borderColor: 'var(--border-color)' }}>
+                          <span className="badge bg-secondary-subtle text-secondary small border mb-2">Question {idx+1}</span>
+                          <p className="small text-secondary mb-0" style={{ color: 'var(--text-primary)', lineHeight: '1.5' }}>{q.questionText}</p>
+                        </div>
+                      ))
+                    ) : (
+                      <p className="small text-muted fst-italic">No related practice questions logged for this specific subject yet.</p>
+                    )}
                   </div>
                 </div>
               )}
@@ -221,7 +277,7 @@ export const RevisionRoom = () => {
               {sessionTab === 'rating' && (
                 <div className="text-center py-3">
                   <h6 className="fw-semibold text-secondary small mb-3">How well do you remember this syllabus topic?</h6>
-                  <p className="small text-muted mb-4">Rating adjusts the next revision interval mathematically.</p>
+                  <p className="small text-muted mb-4">Rating adjusts the next revision interval mathematically using the spaced repetition algorithm.</p>
                   
                   <div className="row g-2 justify-content-center">
                     {[

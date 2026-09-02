@@ -1,11 +1,60 @@
 import dotenv from 'dotenv';
 import { generateWithGemini } from './geminiClient.js';
+import { generateWithGroq } from './groqClient.js';
 
 dotenv.config();
 
 export const evaluateAnswer = async (questionText, answerText) => {
-  const provider = process.env.AI_PROVIDER || 'gemini';
+  const provider = process.env.AI_PROVIDER || 'groq';
 
+  // 1. Try Groq (Primary & Superfast)
+  if (provider === 'groq' || process.env.GROQ_API_KEY) {
+    try {
+      const messages = [
+        {
+          role: 'system',
+          content: `You are an expert UPSC Civil Services examiner. Evaluate the mains answer. Provide the response in strict valid JSON format. Do NOT wrap it in markdown code blocks. The JSON must have the following keys:
+          {
+            "score": 6.5,
+            "introScore": 7,
+            "bodyScore": 6,
+            "conclusionScore": 7,
+            "structureFeedback": "Detailed feedback on introduction and answer structure.",
+            "contentFeedback": "Detailed feedback on body arguments, missing dimensions and data points.",
+            "suggestions": ["Suggestion 1 to improve content", "Suggestion 2 to improve clarity"],
+            "strengths": ["Clear definition of core terms", "Good logical flow"],
+            "weaknesses": ["Lack of data references", "Weak concluding statement"],
+            "missingDimensions": ["Underlining constitutional safety nets", "Mentioning Sarkaria Commission findings"],
+            "improvementSuggestions": ["Incorporate committee recommendations", "Draw flowchart maps for presentation"],
+            "idealStructure": "Intro: Contextualize Article 356 -> Body: Misuse history & safeguards -> Conclusion: S.R. Bommai case way forward",
+            "suggestedExamples": ["Kesavananda Bharati case 1973", "Sarkaria Commission 1988"],
+            "suggestedConclusion": "In conclusion, a progressive federal union requires constructive cooperation aligning to the cooperative federalism benchmarks.",
+            "estimatedWordCount": 210,
+            "modelAnswerOutline": "1. Introduction mapping core constitutional article. 2. Body outlining historical safeguards vs Unitary tendencies. 3. Way forward referencing Bommai guidelines."
+          }`
+        },
+        {
+          role: 'user',
+          content: `Question: "${questionText}"\n\nAnswer: "${answerText}"`
+        }
+      ];
+
+      const groqText = await generateWithGroq(messages, { jsonMode: true, timeoutMs: 12000, maxTokens: 1500 });
+      if (groqText) {
+        let cleanJson = groqText.trim();
+        if (cleanJson.includes('```json')) {
+          cleanJson = cleanJson.split('```json')[1].split('```')[0].trim();
+        } else if (cleanJson.includes('```')) {
+          cleanJson = cleanJson.split('```')[1].split('```')[0].trim();
+        }
+        return JSON.parse(cleanJson);
+      }
+    } catch (error) {
+      console.warn('Groq live evaluation failed. Falling back:', error.message);
+    }
+  }
+
+  // 2. Try Gemini
   if (provider === 'gemini' || process.env.GEMINI_API_KEY) {
     try {
       const prompt = `
@@ -57,7 +106,7 @@ export const evaluateAnswer = async (questionText, answerText) => {
         return report;
       }
     } catch (error) {
-      console.warn('Gemini live evaluation failed. Falling back to mock evaluation engine:', error.message);
+      console.warn('Gemini live evaluation failed. Falling back:', error.message);
     }
   } else if ((provider === 'openai' || provider === 'chatgpt') && process.env.OPENAI_API_KEY) {
     try {

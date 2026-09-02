@@ -5,6 +5,7 @@ import MockTestHistory from '../models/MockTestHistory.js';
 import MainsAnswer from '../models/MainsAnswer.js';
 import StudentProfile from '../models/StudentProfile.js';
 import { generateWithGemini } from '../services/ai/geminiClient.js';
+import { generateWithGroq } from '../services/ai/groqClient.js';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -56,6 +57,13 @@ export const sendChatMessage = async (req, res, next) => {
 
     let contextPrompt = `
       You are a senior UPSC CSE Civil Services mentor. The student has requested mentoring.
+      Official UPSC CSE Exam Timeline Reference:
+      - UPSC CSE 2026: Prelims was held on 24 May 2026 (Sunday). Mains from September 2026.
+      - UPSC CSE 2025: Prelims on 25 May 2025 (Sunday). Mains on 22 August 2025.
+      - UPSC CSE 2024: Prelims on 16 June 2024 (Sunday). Mains on 20 September 2024.
+      - UPSC CSE 2023: Prelims on 28 May 2023 (Sunday).
+      - Pattern: Prelims (GS 1 + CSAT 33% qualifying) -> Mains (1750 Marks) -> Personality Test (275 Marks).
+
       Student Stats Context:
       - Syllabus Completed: ${completedCount} out of ${totalTopicsCount} topics.
       - Weak Areas: ${weakTopics.join(', ') || 'None registered yet'}.
@@ -66,9 +74,43 @@ export const sendChatMessage = async (req, res, next) => {
     `;
 
     let reply = '';
-    const provider = process.env.AI_PROVIDER || 'gemini';
+    const provider = process.env.AI_PROVIDER || 'groq';
 
-    if (provider === 'gemini' || process.env.GEMINI_API_KEY) {
+    // 1. Try Groq (Ultra-fast real-time inference)
+    if (provider === 'groq' || process.env.GROQ_API_KEY) {
+      try {
+        const messages = [
+          {
+            role: 'system',
+            content: `You are a knowledgeable, encouraging, and senior UPSC CSE Civil Services mentor. 
+${contextPrompt}
+Current Date: ${new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+
+Instructions:
+1. Answer the student's question directly, accurately, and politely (e.g. historical facts, CSAT puzzles, day calculations, polity articles, economy concepts).
+2. Anti-Hallucination & Factual Guardrails:
+   - For future/unannounced UPSC exam dates or notifications: NEVER invent or hallucinate arbitrary exact dates. Explicitly clarify that UPSC CSE Prelims is strictly conducted on a Sunday (traditionally in late May / early June) and official dates must always be verified on upsc.gov.in.
+   - Do not make up fake commission reports, fake case law names, or fake dates.
+3. Understand the language of the prompt (Hindi, English, or Hinglish) and reply in the same natural tone.
+4. If relevant to UPSC CSE, add a concise advisory takeaway. Keep the answer concise and engaging (under 200 words).`
+          },
+          {
+            role: 'user',
+            content: text
+          }
+        ];
+
+        const groqText = await generateWithGroq(messages, { timeoutMs: 8000, maxTokens: 450 });
+        if (groqText) {
+          reply = groqText;
+        }
+      } catch (err) {
+        console.warn('Groq chat failed, falling back:', err.message);
+      }
+    }
+
+    // 2. Try Gemini
+    if (!reply && (provider === 'gemini' || process.env.GEMINI_API_KEY)) {
       try {
         const prompt = `
           ${contextPrompt}

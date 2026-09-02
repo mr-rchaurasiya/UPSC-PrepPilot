@@ -3,8 +3,12 @@ import { AuthContext } from '../../context/AuthContext.jsx';
 import { ThemeContext } from '../../context/ThemeContext.jsx';
 
 export const Navbar = () => {
-  const { user, logout } = useContext(AuthContext);
-  const { theme, toggleTheme } = useContext(ThemeContext);
+  const auth = useContext(AuthContext) || {};
+  const user = auth.user;
+  const logout = auth.logout || (() => {});
+  const themeCtx = useContext(ThemeContext) || {};
+  const theme = themeCtx.theme || 'dark';
+  const toggleTheme = themeCtx.toggleTheme || (() => {});
 
   return (
     <nav className="navbar navbar-expand-lg border-bottom px-4 py-3 sticky-top" style={{ backgroundColor: 'var(--bg-secondary)', borderBottomColor: 'var(--border-color)' }}>

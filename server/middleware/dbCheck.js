@@ -1,5 +1,7 @@
 import mongoose from 'mongoose';
 import { sendVerificationEmail } from '../services/emailService.js';
+import { generateWithGroq } from '../services/ai/groqClient.js';
+import { evaluateAnswer } from '../services/ai/evaluationEngine.js';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -297,8 +299,49 @@ export const dbCheck = async (req, res, next) => {
       const lower = text.toLowerCase();
       let reply = '';
 
-      const provider = process.env.AI_PROVIDER || 'mock';
-      if (provider === 'gemini' && process.env.GEMINI_API_KEY) {
+      const provider = process.env.AI_PROVIDER || 'groq';
+
+      // 1. Try Groq (Primary & Ultra Fast)
+      if (provider === 'groq' || process.env.GROQ_API_KEY) {
+        try {
+          const messages = [
+            {
+              role: 'system',
+              content: `You are a knowledgeable, encouraging, and senior UPSC CSE Civil Services mentor. 
+Official UPSC CSE Exam Timeline Reference:
+- UPSC CSE 2026: Prelims was held on 24 May 2026 (Sunday). Mains from September 2026.
+- UPSC CSE 2025: Prelims on 25 May 2025 (Sunday). Mains on 22 August 2025.
+- UPSC CSE 2024: Prelims on 16 June 2024 (Sunday). Mains on 20 September 2024.
+- UPSC CSE 2023: Prelims on 28 May 2023 (Sunday).
+- Pattern: Prelims (GS 1 + CSAT 33% qualifying) -> Mains (1750 Marks) -> Personality Test (275 Marks).
+
+Current Date: ${new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+
+Instructions:
+1. Answer the student's question directly, accurately, and politely (e.g. historical facts, CSAT puzzles, day calculations, polity articles, economy concepts).
+2. Anti-Hallucination & Factual Guardrails:
+   - Always refer to the official UPSC Timeline Reference for exact exam dates (e.g. UPSC CSE 2026 Prelims: 24 May 2026 Sunday).
+   - Do not make up fake commission reports, fake case law names, or fake dates.
+3. Understand the language of the prompt (Hindi, English, or Hinglish) and reply in the same natural tone.
+4. If relevant to UPSC CSE, add a concise advisory takeaway. Keep the answer concise and engaging (under 200 words).`
+            },
+            {
+              role: 'user',
+              content: text
+            }
+          ];
+
+          const groqText = await generateWithGroq(messages, { timeoutMs: 8000, maxTokens: 450 });
+          if (groqText) {
+            reply = groqText;
+          }
+        } catch (err) {
+          console.warn('Groq dbCheck chat failed, falling back:', err.message);
+        }
+      }
+
+      // 2. Try Gemini
+      if (!reply && (provider === 'gemini' && process.env.GEMINI_API_KEY)) {
         try {
           const { GoogleGenerativeAI } = await import('@google/generative-ai');
           const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
@@ -321,7 +364,7 @@ export const dbCheck = async (req, res, next) => {
         } catch (err) {
           console.warn('Gemini offline chat failed, falling back:', err.message);
         }
-      } else if ((provider === 'openai' || provider === 'chatgpt') && process.env.OPENAI_API_KEY) {
+      } else if (!reply && (provider === 'openai' || provider === 'chatgpt') && process.env.OPENAI_API_KEY) {
         try {
           const openAiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
             method: 'POST',
@@ -475,7 +518,21 @@ export const dbCheck = async (req, res, next) => {
     });
   }
 
-  // 6. Generic success for CRUD operations
+  // 6. Mains Evaluation
+  if (cleanPath.startsWith('/mains/evaluate')) {
+    const { question, answer } = req.body;
+    try {
+      const evaluation = await evaluateAnswer(question, answer);
+      return res.status(200).json({
+        success: true,
+        evaluation
+      });
+    } catch (e) {
+      console.error('Mains evaluation in dbCheck failed:', e);
+    }
+  }
+
+  // 7. Generic success for CRUD operations
   return res.status(200).json({
     success: true,
     message: 'Operation simulated successfully in offline mock mode.'
