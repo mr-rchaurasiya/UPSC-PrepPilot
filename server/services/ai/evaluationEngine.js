@@ -5,11 +5,11 @@ dotenv.config();
 export const evaluateAnswer = async (questionText, answerText) => {
   const provider = process.env.AI_PROVIDER || 'mock';
 
-  if (provider === 'gemini' && process.env.GEMINI_API_KEY) {
+  if (provider === 'gemini' && process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY.startsWith('AIzaSy')) {
     try {
       const { GoogleGenerativeAI } = await import('@google/generative-ai');
       const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-      const model = genAI.getGenerativeModel({ model: 'gemini-3.6-flash' });
+      const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
 
       const prompt = `
         You are an expert UPSC Civil Services examiner. Evaluate the following mains answer.
@@ -47,7 +47,9 @@ export const evaluateAnswer = async (questionText, answerText) => {
         }
       `;
 
-      const result = await model.generateContent(prompt);
+      const generatePromise = model.generateContent(prompt);
+      const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Gemini API timeout')), 6000));
+      const result = await Promise.race([generatePromise, timeoutPromise]);
       const text = result.response.text();
       
       let cleanJson = text;

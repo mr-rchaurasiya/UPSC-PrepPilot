@@ -67,11 +67,11 @@ export const sendChatMessage = async (req, res, next) => {
     let reply = '';
     const provider = process.env.AI_PROVIDER || 'mock';
 
-    if (provider === 'gemini' && process.env.GEMINI_API_KEY) {
+    if (provider === 'gemini' && process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY.startsWith('AIzaSy')) {
       try {
         const { GoogleGenerativeAI } = await import('@google/generative-ai');
         const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-        const model = genAI.getGenerativeModel({ model: 'gemini-3.6-flash' });
+        const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
 
         const prompt = `
           ${contextPrompt}
@@ -81,19 +81,24 @@ export const sendChatMessage = async (req, res, next) => {
           
           Instructions:
           1. Answer the student's question directly first. Do not ignore their query or jump straight to generic advice.
-          2. Keep the response natural, conversational, and tailored to the query.
+          2. Keep the response natural, conversational, and tailored to the query (support Hindi/Hinglish/English depending on input).
           3. Frame advice as advisory. Keep it within 200 words.
         `;
 
-        const result = await model.generateContent(prompt);
+        const generatePromise = model.generateContent(prompt);
+        const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Gemini request timeout')), 5000));
+        const result = await Promise.race([generatePromise, timeoutPromise]);
         reply = result.response.text();
       } catch (err) {
-        console.warn('Gemini chat failed, falling back to mock reply logic:', err.message);
+        console.warn('Gemini chat failed, falling back to instant mock reply logic:', err.message);
       }
     } else if ((provider === 'openai' || provider === 'chatgpt') && process.env.OPENAI_API_KEY) {
       try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 5000);
         const openAiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
           method: 'POST',
+          signal: controller.signal,
           headers: {
             'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
             'Content-Type': 'application/json'
@@ -107,6 +112,7 @@ export const sendChatMessage = async (req, res, next) => {
             max_tokens: 400
           })
         });
+        clearTimeout(timeoutId);
         const openAiData = await openAiResponse.json();
         if (openAiData.choices && openAiData.choices[0]) {
           reply = openAiData.choices[0].message.content;
@@ -118,25 +124,27 @@ export const sendChatMessage = async (req, res, next) => {
 
     if (!reply) {
       // High Quality Mock Response mapping matches standard questions
-      const lower = text.toLowerCase();
-      if (lower.includes('what should i study today')) {
+      const lower = text.toLowerCase().trim();
+      if (lower.includes('hello') || lower.includes('hi') || lower.includes('namaste') || lower.includes('hey') || lower.includes('aspirant')) {
+        reply = `Namaste! Aapki UPSC preparation me madad karne ke liye mai yahan hoon. Aap mujhse study schedule, mock test accuracy (${avgAccuracy}%), revision strategy ya specific topics (Polity, History, Economy) ke baare me pooch sakte hain. Aaj kya study plan hai?`;
+      } else if (lower.includes('what should i study today') || lower.includes('kya padhu')) {
         reply = `Looking at your syllabus stats (${completedCount}/${totalTopicsCount} completed), you should prioritize uncompleted Polity or History targets. Also check your ${mistakes.length} active mistake book items to avoid careless conceptual traps today.`;
-      } else if (lower.includes('why is my score not improving')) {
+      } else if (lower.includes('why is my score not improving') || lower.includes('score')) {
         reply = `Your mock average accuracy is currently at ${avgAccuracy}%. To cross the qualifying cut-off benchmark, focus strictly on reviewing explanations for wrong options. Your mistake book has ${mistakes.length} unresolved errors—reviewing those is the key to improving.`;
-      } else if (lower.includes('which topics are weak')) {
+      } else if (lower.includes('which topics are weak') || lower.includes('weak')) {
         reply = weakTopics.length > 0 
           ? `Your weak topics according to syllabus confidence rating include: ${weakTopics.join(', ')}. Focus on fundamental text readings and attempt topic practice MCQs for these areas.`
           : `You do not have any topics marked 'Weak' or rated under low confidence yet. Continue mocks to map weak areas.`;
-      } else if (lower.includes('explain federalism')) {
+      } else if (lower.includes('explain federalism') || lower.includes('federalism')) {
         reply = `Federalism in India represents a 'quasi-federal' structure with unitary characters. Landmark cases like S.R. Bommai (1994) declared federalism as part of the basic structure, laying down strict constraints on Article 356 executive proclamations.`;
-      } else if (lower.includes('quiz me')) {
-        reply = `Here is a quick Polity question for you: 'Which amendment introduced the Anti-Defection law (Tenth Schedule)?' (Tip: Think about 1985 amendment rules).`;
-      } else if (lower.includes('mains question')) {
+      } else if (lower.includes('quiz me') || lower.includes('quiz')) {
+        reply = `Here is a quick Polity question for you: 'Which amendment introduced the Anti-Defection law (Tenth Schedule)?' (Tip: Think about 1985 52nd Amendment).`;
+      } else if (lower.includes('mains question') || lower.includes('mains')) {
         reply = `Here is a subjective prompt: 'Critically analyze the efficacy of the Inter-State Council in resolving federal frictions. (15 Marks, 250 Words)'.`;
-      } else if (lower.includes('7-day revision plan')) {
+      } else if (lower.includes('7-day revision plan') || lower.includes('revision plan') || lower.includes('plan')) {
         reply = `Here is a 7-day Revision Plan: Day 1-2: Fundamental Rights & DPSP. Day 3-4: Parliament & Emergency restraints. Day 5: Union-State financial devolution. Day 6: Sarkaria Commission notes review. Day 7: Attempt 100-Question Mock Test.`;
       } else {
-        reply = `Interesting query. Based on your syllabus completed (${completedCount} topics) and active mistakes (${mistakes.length}), I recommend grounding your arguments in Constitutional Articles and committee findings (like Punchhi and Sarkaria). What specific topic can I clarify next?`;
+        reply = `Aapke current syllabus progress (${completedCount}/${totalTopicsCount} topics) aur mock accuracy (${avgAccuracy}%) ko dekhte hue, mai recommend karunga ki standard sources (NCERT, Laxmikanth, Current Affairs) ko revise karte rahein aur mistake book par dhyan dein. Kisi specific subject ya doubt par detail chahiye to batayein!`;
       }
     }
 
