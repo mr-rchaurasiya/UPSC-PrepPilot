@@ -4,6 +4,7 @@ import Mistake from '../models/Mistake.js';
 import MockTestHistory from '../models/MockTestHistory.js';
 import MainsAnswer from '../models/MainsAnswer.js';
 import StudentProfile from '../models/StudentProfile.js';
+import { generateWithGemini } from '../services/ai/geminiClient.js';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -65,14 +66,10 @@ export const sendChatMessage = async (req, res, next) => {
     `;
 
     let reply = '';
-    const provider = process.env.AI_PROVIDER || 'mock';
+    const provider = process.env.AI_PROVIDER || 'gemini';
 
-    if (provider === 'gemini' && process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY.startsWith('AIzaSy')) {
+    if (provider === 'gemini' || process.env.GEMINI_API_KEY) {
       try {
-        const { GoogleGenerativeAI } = await import('@google/generative-ai');
-        const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-        const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
-
         const prompt = `
           ${contextPrompt}
           Current Date: ${new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
@@ -80,17 +77,17 @@ export const sendChatMessage = async (req, res, next) => {
           Student Message: "${text}"
           
           Instructions:
-          1. Answer the student's question directly first. Do not ignore their query or jump straight to generic advice.
-          2. Keep the response natural, conversational, and tailored to the query (support Hindi/Hinglish/English depending on input).
-          3. Frame advice as advisory. Keep it within 200 words.
+          1. Answer the student's question directly, accurately, and politely (e.g. if they ask a date, day of week, CSAT reasoning question, history fact, or polity question, solve/answer it correctly first).
+          2. Understand the language of the prompt (Hindi, English, or Hinglish) and reply in the same natural tone.
+          3. If relevant to UPSC CSE, add a concise advisory takeaway. Keep the answer concise (under 200 words).
         `;
 
-        const generatePromise = model.generateContent(prompt);
-        const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Gemini request timeout')), 5000));
-        const result = await Promise.race([generatePromise, timeoutPromise]);
-        reply = result.response.text();
+        const aiText = await generateWithGemini(prompt, { timeoutMs: 8000 });
+        if (aiText) {
+          reply = aiText;
+        }
       } catch (err) {
-        console.warn('Gemini chat failed, falling back to instant mock reply logic:', err.message);
+        console.warn('Gemini chat failed, falling back:', err.message);
       }
     } else if ((provider === 'openai' || provider === 'chatgpt') && process.env.OPENAI_API_KEY) {
       try {

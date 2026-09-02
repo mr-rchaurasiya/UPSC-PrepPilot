@@ -1,16 +1,13 @@
 import dotenv from 'dotenv';
+import { generateWithGemini } from './geminiClient.js';
 
 dotenv.config();
 
 export const evaluateAnswer = async (questionText, answerText) => {
-  const provider = process.env.AI_PROVIDER || 'mock';
+  const provider = process.env.AI_PROVIDER || 'gemini';
 
-  if (provider === 'gemini' && process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY.startsWith('AIzaSy')) {
+  if (provider === 'gemini' || process.env.GEMINI_API_KEY) {
     try {
-      const { GoogleGenerativeAI } = await import('@google/generative-ai');
-      const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-      const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
-
       const prompt = `
         You are an expert UPSC Civil Services examiner. Evaluate the following mains answer.
         
@@ -25,10 +22,10 @@ export const evaluateAnswer = async (questionText, answerText) => {
         
         Provide the response in strict JSON format. Do NOT wrap it in markdown code blocks. The JSON must have the following keys:
         {
-          "score": 6.5, // overall score out of 10
-          "introScore": 7, // score out of 10
-          "bodyScore": 6, // score out of 10
-          "conclusionScore": 7, // score out of 10
+          "score": 6.5,
+          "introScore": 7,
+          "bodyScore": 6,
+          "conclusionScore": 7,
           "structureFeedback": "Detailed feedback on introduction and answer structure.",
           "contentFeedback": "Detailed feedback on body arguments, missing dimensions and data points.",
           "suggestions": [
@@ -47,20 +44,18 @@ export const evaluateAnswer = async (questionText, answerText) => {
         }
       `;
 
-      const generatePromise = model.generateContent(prompt);
-      const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Gemini API timeout')), 6000));
-      const result = await Promise.race([generatePromise, timeoutPromise]);
-      const text = result.response.text();
-      
-      let cleanJson = text;
-      if (text.includes('```json')) {
-        cleanJson = text.split('```json')[1].split('```')[0].trim();
-      } else if (text.includes('```')) {
-        cleanJson = text.split('```')[1].split('```')[0].trim();
-      }
+      const text = await generateWithGemini(prompt, { jsonMode: true, timeoutMs: 12000 });
+      if (text) {
+        let cleanJson = text;
+        if (text.includes('```json')) {
+          cleanJson = text.split('```json')[1].split('```')[0].trim();
+        } else if (text.includes('```')) {
+          cleanJson = text.split('```')[1].split('```')[0].trim();
+        }
 
-      const report = JSON.parse(cleanJson);
-      return report;
+        const report = JSON.parse(cleanJson);
+        return report;
+      }
     } catch (error) {
       console.warn('Gemini live evaluation failed. Falling back to mock evaluation engine:', error.message);
     }
